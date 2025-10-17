@@ -1,0 +1,9 @@
+RUNBOOK Reuni Prod v15
+
+1) Unzip bundle to /root
+2) chmod +x install-server-v2.sh full-deploy-live.sh fix-frontend.sh verify-build.sh
+3) Edit backend/.env placeholders
+4) ./install-server-v2.sh
+5) ./full-deploy-live.sh
+6) Access https://reuni.local/admin
+7) Demo broadcast, dashboard, worker check

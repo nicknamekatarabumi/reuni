@@ -1,0 +1,73 @@
+version: "3.8"
+services:
+  mkcert-init:
+    image: node:20-alpine
+    container_name: reuni_mkcert_init
+    working_dir: /work
+    volumes:
+      - ./traefik/certs:/certs
+    entrypoint: ["/bin/sh","-c"]
+    command: >
+      apk add --no-cache curl libnss3-tools &&       curl -fsSL -o /usr/local/bin/mkcert https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-amd64 &&       chmod +x /usr/local/bin/mkcert &&       /usr/local/bin/mkcert -install || true;       /usr/local/bin/mkcert -cert-file /certs/reuni.local.crt -key-file /certs/reuni.local.key reuni.local 192.168.152.44 || true;       echo mkcert-done
+    restart: "no"
+
+  traefik:
+    image: traefik:v2.10
+    restart: unless-stopped
+    ports: ["80:80","443:443"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic_conf.yml:/dynamic/dynamic_conf.yml:ro
+      - ./traefik/certs:/certs:ro
+    networks: [reuni-net]
+
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: M4ruw4h3
+      MYSQL_DATABASE: reuni_prod
+      MYSQL_USER: reuni_admin
+      MYSQL_PASSWORD: M4ruw4h3
+    volumes:
+      - /var/lib/reuni-data/mysql:/var/lib/mysql
+    networks: [reuni-net]
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - /var/lib/reuni-data/redis:/data
+    networks: [reuni-net]
+
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    depends_on: [db, redis]
+    volumes:
+      - ./backend:/usr/src/app
+      - /var/lib/reuni-data/uploads:/usr/src/app/uploads
+    networks: [reuni-net]
+
+  worker:
+    build: ./backend
+    command: [ "node", "src/queue/worker.js" ]
+    env_file: ./backend/.env
+    depends_on: [redis, db]
+    volumes:
+      - ./backend:/usr/src/app
+      - /var/lib/reuni-data/uploads:/usr/src/app/uploads
+    networks: [reuni-net]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: reuni-frontend
+    ports:
+      - "8080:80"
+    networks: [reuni-net]
+    restart: always
+
+networks:
+  reuni-net:
+    driver: bridge
